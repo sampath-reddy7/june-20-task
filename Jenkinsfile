@@ -48,7 +48,7 @@ pipeline {
                 script {
                     // Using withCredentials to securely access Docker Hub credentials
                     withCredentials([usernamePassword(credentialsId: dockerhub-credentials, usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                        sh "docker login -u ${sampathreddy926} -p ${Dineshreddy123@}"
+                        sh "docker login -u ${sampathreddy926} -p ${Dineshreddy123\\@}"
                         dockerImage.push()
                         dockerImage.push('latest') // Also tag as 'latest' for convenience
                         sh "docker logout"
