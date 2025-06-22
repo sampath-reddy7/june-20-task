@@ -14,7 +14,8 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git 'https://github.com/sampath-reddy7/june-20-task.git'
+                //git 'https://github.com/sampath-reddy7/june-20-task.git'
+                 echo "Checking out code from GitHub..."
             }
         }
 
@@ -57,4 +58,10 @@ pipeline {
             }
         }
     }
+     success {
+            echo 'Pipeline finished successfully!'
+        }
+        failure {
+            echo 'Pipeline failed!'
+        }
 }
