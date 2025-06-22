@@ -1,62 +1,82 @@
 pipeline {
-    agent any
+    agent any // Run on any available Jenkins agent
 
     environment {
-        // Replace with your Docker Hub username
-        DOCKER_HUB_USERNAME = 'sampathreddy926'
-        // Replace with your repository name on Docker Hub (e.g., my-website-image)
-        // It's common to use your Docker Hub username as a prefix: your-dockerhub-username/my-website
-        DOCKER_IMAGE_NAME = "${sampathreddy926}/my-website"
-        // The ID of the Jenkins credential you created for Docker Hub
-        DOCKER_HUB_CREDENTIAL_ID = 'dockerhub-credentials'
+        // Jenkins Credential ID for Docker Hub
+        DOCKER_HUB_CREDENTIALS_ID = 'dockerhub-credentials' // MUST match the ID you set in Jenkins
+
+        // Your Docker Hub username
+        DOCKER_HUB_USERNAME = 'sampathreddy926' // REPLACE THIS! e.g., 'myusername'
+
+        // Name for your Docker image
+        DOCKER_IMAGE_NAME = 'my-website-barista' // You can change this name
+
+        // Tag for the image (uses Jenkins build number for uniqueness)
+        DOCKER_TAG = "${env.BUILD_NUMBER}"
+
+        // Full Docker Hub repository path
+        DOCKER_HUB_REPO = "${DOCKER_HUB_USERNAME}/${DOCKER_IMAGE_NAME}"
     }
 
     stages {
-        stage('Checkout') {
+        stage('1. Checkout Code') {
             steps {
-                //git 'https://github.com/sampath-reddy7/june-20-task.git'
-                 echo "Checking out code from GitHub..."
+                echo "--- Stage: Checking out code from GitHub ---"
+                // Jenkins automatically checks out the code when using "Pipeline script from SCM"
             }
         }
 
-        stage('Build Docker Image') {
+        stage('2. Build Docker Image') {
             steps {
                 script {
-                    dockerImage = docker.build("${my-website-barista}:${env.BUILD_NUMBER}")
-                    echo "Docker image built: ${dockerImage.id}"
-                }
-            }
-        }
-
-        stage('Run Container (Local Test)') {
-            steps {
-                script {
-                    // This step is optional but highly recommended for testing before pushing
-                    // It runs the container locally on the Jenkins agent
-                    docker.image("${my-website-barista}:${env.BUILD_NUMBER}").withRun('-p 8097:80') { c ->
-                        echo "Container running on port 8097. Sleeping for 10 seconds for verification..."
-                        sleep 10
-                        // You could add a curl command here to check if the website is accessible
-                        // For example: sh 'curl -f http://localhost:8081 || exit 1'
-                        echo "Container test complete."
+                    echo "--- Stage: Building Docker Image ---"
+                    docker.withRegistry('https://registry.hub.docker.com', "${DOCKER_HUB_CREDENTIALS_ID}") {
+                        def customImage = docker.build "${DOCKER_HUB_REPO}:${DOCKER_TAG}", '.'
+                        echo "Docker Image built: ${customImage.id}"
                     }
                 }
             }
         }
 
-        stage('Push to Docker Hub') {
+        stage('3. Run and Test Container (Optional)') {
             steps {
                 script {
-                    // Using withCredentials to securely access Docker Hub credentials
-                    withCredentials([usernamePassword(credentialsId: dockerhub-credentials, usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                        sh "docker login -u ${sampathreddy926} -p ${Dineshreddy123\\@}"
-                        dockerImage.push()
-                        dockerImage.push('latest') // Also tag as 'latest' for convenience
-                        sh "docker logout"
+                    echo "--- Stage: Running temporary container for testing ---"
+                    // Run container, map port 8080 on host to 80 in container
+                    sh "docker run -d -p 8097:80 --name temp-website-container-${env.BUILD_NUMBER} ${DOCKER_HUB_REPO}:${DOCKER_TAG}"
+                    sleep 10 // Give time for Nginx to start
+                    sh "curl -f http://localhost:8097 || { echo 'ERROR: Website not accessible!'; exit 1; }"
+                    sh "docker stop temp-website-container-${env.BUILD_NUMBER} || true"
+                    sh "docker rm temp-website-container-${env.BUILD_NUMBER} || true"
+                    echo "Temporary container tested and cleaned up."
+                }
+            }
+        }
+
+        stage('4. Push Image to Docker Hub') {
+            steps {
+                script {
+                    echo "--- Stage: Pushing Image to Docker Hub ---"
+                    docker.withRegistry('https://registry.hub.docker.com', "${DOCKER_HUB_CREDENTIALS_ID}") {
+                        def customImage = docker.image("${DOCKER_HUB_REPO}:${DOCKER_TAG}")
+                        customImage.push() // Push with build number tag
+                        customImage.push("latest") // Also push with 'latest' tag
+                        echo "Image pushed to Docker Hub: ${DOCKER_HUB_REPO}:${DOCKER_TAG} and :latest"
                     }
                 }
             }
         }
     }
-    
+
+    post {
+        always {
+            echo "Pipeline finished."
+        }
+        success {
+            echo 'SUCCESS: Pipeline completed!'
+        }
+        failure {
+            echo 'FAILURE: Pipeline failed! Check logs.'
+        }
+    }
 }
